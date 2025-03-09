@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预约管理后台</title>
+    <link href="https://cdn.jsdelivr.net/npm/vant@3.6.2/lib/index.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f7f8fa;
+            font-family: 'Microsoft YaHei';
+        }
+        .container {
+            padding: 12px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .search-bar {
+            margin-bottom: 12px;
+        }
+        .status-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .copy-btn {
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <van-nav-bar
+        title="预约管理"
+        left-text="注销"
+        right-text="刷新"
+        @click-left="logout"
+        @click-right="fetchData"
+    />
+    
+    <div class="container">
+        <van-search
+            v-model="searchKey"
+            placeholder="搜索联系人/电话"
+            class="search-bar"
+        />
+        
+        <van-dropdown-menu>
+            <van-dropdown-item v-model="statusFilter" :options="statusOptions" />
+        </van-dropdown-menu>
+
+        <van-list>
+            <van-cell v-for="item in filteredList" :key="item.id">
+                <template #title>
+                    <span class="status-tag" :style="statusStyle(item.status)">
+                        {{ item.status }}
+                    </span>
+                    {{ item.contact }}（{{ item.phone }}）
+                </template>
+                <template #label>
+                    <div>路线：{{ formatRoute(item.route) }}</div>
+                    <div>日期：{{ item.date }}</div>
+                    <div>车型：{{ item.carType }}</div>
+                    <div>价格：¥{{ item.price }}</div>
+                    <van-button
+                        size="mini"
+                        @click="showDetail(item)"
+                        icon="edit"
+                        style="margin-right:8px"
+                    >编辑</van-button>
+                    <van-button
+                        size="mini"
+                        type="danger"
+                        @click="deleteItem(item)"
+                        icon="delete"
+                    >删除</van-button>
+                </template>
+            </van-cell>
+        </van-list>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <van-dialog v-model="showDialog" title="预约详情" show-cancel-button @confirm="saveEdit">
+        <van-form class="dialog-form">
+            <van-field label="状态" name="status">
+                <template #input>
+                    <van-radio-group v-model="currentItem.status" direction="horizontal">
+                        <van-radio name="待处理">待处理</van-radio>
+                        <van-radio name="已确认">已确认</van-radio>
+                        <van-radio name="已完成">已完成</van-radio>
+                    </van-radio-group>
+                </template>
+            </van-field>
+            <van-field v-model="currentItem.contact" label="联系人" />
+            <van-field v-model="currentItem.phone" label="电话" type="tel" />
+            <van-field v-model="currentItem.date" label="日期" type="date" />
+            <van-field v-model="currentItem.people" label="人数" type="number" />
+        </van-form>
+    </van-dialog>
+
+    <!-- 悬浮按钮 -->
+    <van-floating-button
+        icon="plus"
+        @click="addNew"
+        style="bottom: 80px;"
+    />
+	<!-- //在导航栏添加按钮 -->
+<van-nav-bar
+  right-text="改密"
+  @click-right="changePassword"
+/>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vant@3.6.2/lib/vant.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.13.2/dist/av-live-query-min.js"></script>
+
+<script>
+
+	// LeanCloud初始化
+AV.init({
+    appId: "74Xir9Wxem42SP8G2lIJgWu4-gzGzoHsz",
+    appKey: "CtqUN4TzeIg5zze4oZFzNpt4",
+    serverURL: "https://74xir9wx.lc-cn-n1-shared.com",
+	useAVCloud: true // 添加此参数
+});
+
+// 正确注册Vant组件
+Vue.use(vant);
+	
+new Vue({
+    el: '#app',
+    data() {
+        return {
+            searchKey: '',
+            statusFilter: 'all',
+            statusOptions: [
+                { text: '全部状态', value: 'all' },
+                { text: '待处理', value: '待处理' },
+                // ...其他状态
+            ],
+            bookingList: [],
+            currentItem: {},
+            showDialog: false
+        }
+    },
+    computed: {
+        filteredList() {
+            return this.bookingList.filter(item => {
+                const matchSearch = item.contact.includes(this.searchKey) || 
+                                  item.phone.includes(this.searchKey);
+                const matchStatus = this.statusFilter === 'all' || 
+                                  item.status === this.statusFilter;
+                return matchSearch && matchStatus;
+            });
+        }
+    },
+    methods: {
+        // ✅ 规范化的方法定义
+        async handleLogin() {
+            try {
+                const password = await this.$dialog.prompt({
+                    title: '管理员登录',
+                    message: '请输入密码',
+                    inputType: 'password'
+                });
+                await AV.User.logIn('admin', password);
+            } catch (error) {
+                throw new Error('登录失败: ' + error.message);
+            }
+        },
+        
+        const user = await AV.User.logIn('admin', password);
+        this.fetchData();
+        
+        // ✅ 添加实时查询初始化
+        const query = new AV.Query('Booking');
+        query.subscribe().on('create', () => this.fetchData());
+        query.subscribe().on('update', () => this.fetchData());
+        query.subscribe().on('delete', () => this.fetchData());
+        
+    } catch (error) {
+        this.$dialog.alert({ message: '登录失败: ' + error.message });
+        window.location.reload();
+    }
+}
+		
+		async fetchData() {
+            const query = new AV.Query('Booking');
+            query.descending('createdAt');
+            this.bookingList = (await query.find()).map(item => ({
+                id: item.id,
+                ...item.attributes
+            }));
+        },
+        showDetail(item) {
+            this.currentItem = { ...item };
+            this.showDialog = true;
+        },
+        async saveEdit() {
+            const obj = AV.Object.createWithoutData('Booking', this.currentItem.id);
+            Object.keys(this.currentItem).forEach(key => {
+                if(key !== 'id') obj.set(key, this.currentItem[key]);
+            });
+            await obj.save();
+            this.fetchData();
+        },
+        async deleteItem(item) {
+            const confirm = await this.$dialog.confirm({
+                message: '确定删除该记录？'
+            });
+            if (confirm === 'confirm') {
+                const obj = AV.Object.createWithoutData('Booking', item.id);
+                await obj.destroy();
+                this.fetchData();
+            }
+        },
+        statusStyle(status) {
+            const colors = {
+                '待处理': '#ff976a',
+                '已确认': '#1989fa',
+                '已完成': '#07c160'
+            };
+            return {
+                backgroundColor: colors[status],
+                color: 'white'
+            };
+        },
+        formatRoute(route) {
+            const routeMap = {
+                classic1: '经典路线一',
+                // ...其他路线映射
+            };
+            return routeMap[route] || route;
+        },
+        async addNew() {
+            this.currentItem = {
+                status: '待处理',
+                date: new Date().toISOString().split('T')[0]
+            };
+            this.showDialog = true;
+        },
+        copyInfo(item) {
+            const text = `【预约信息】
+联系人：${item.contact}
+电话：${item.phone}
+日期：${item.date}
+人数：${item.people}
+路线：${this.formatRoute(item.route)}
+车型：${item.carType}
+状态：${item.status}`;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                this.$toast('已复制到剪贴板');
+            });
+        },
+        async logout() {
+            await AV.User.logOut();
+            window.location.reload();
+        },
+		// 在methods中添加修改密码方法
+// ✅ 规范化的密码修改方法
+        changePassword() {
+            this.$dialog.prompt({
+                title: '修改密码',
+                inputType: 'password'
+            }).then(async newPassword => {
+                try {
+                    const user = AV.User.current();
+                    await user.updatePassword(newPassword);
+                    this.$toast.success('密码修改成功');
+                } catch (error) {
+                    this.$toast.fail('失败: ' + error.message);
+                }
+            });
+        }
+    },
+    
+	mounted() {
+  // ✅ 优化后的初始化流程
+        AV._config.disableCurrentUser = false;
+        this.initApp().catch(error => {
+            this.$dialog.alert({ message: error.message });
+        });
+		// 添加try-catch块
+  try {
+    if (!AV.User.current()) {
+      this.handleLogin();
+    } else {
+      this.fetchData();
+    }
+    
+	  // 实时数据监听
+        const query = new AV.Query('Booking');
+        query.subscribe().on('create', () => this.fetchData());
+        query.subscribe().on('update', () => this.fetchData());
+        query.subscribe().on('delete', () => this.fetchData());
+  } catch (error) {
+    console.error('初始化失败:', error);
+    this.$dialog.alert({
+      message: '初始化失败，请检查网络连接'
+    });
+  }
+		// ✅ 统一登录流程
+    this.initApp().catch(error => {
+        this.$dialog.alert({ message: '初始化失败: ' + error.message });
+    });
+},
+
+	methods: {
+    async initApp() {
+        try {
+            if (!AV.User.current()) {
+                await this.handleLogin();
+            }
+            await this.fetchData();
+            this.initLiveQuery();
+        } catch (error) {
+            throw error;
+        }
+    },
+    initLiveQuery() {
+        const query = new AV.Query('Booking');
+        query.subscribe()
+            .on('create', () => this.fetchData())
+            .on('update', () => this.fetchData())
+            .on('delete', () => this.fetchData());
+    }
+}
+});
+</script>
+</body>
+</html>
