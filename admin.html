@@ -1,0 +1,233 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>预约管理系统</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .login-box { max-width: 400px; margin: 100px auto; }
+        .alert-bar { position: fixed; top: 0; width: 100%; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <!-- 登录界面 -->
+    <div id="loginBox" class="card login-box">
+        <div class="card-body">
+            <h3 class="mb-4">管理员登录</h3>
+            <div class="mb-3">
+                <input type="text" id="username" class="form-control" placeholder="管理员账号">
+            </div>
+            <div class="mb-3">
+                <input type="password" id="password" class="form-control" placeholder="密码">
+            </div>
+            <button onclick="login()" class="btn btn-success w-100">登录</button>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainContent" style="display:none">
+        <div class="alert-bar bg-light p-2 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>客服邮箱：759891165@qq.com</span>
+                <button class="btn btn-danger btn-sm" onclick="logout()">退出登录</button>
+            </div>
+        </div>
+
+        <div class="container mt-5">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>预约时间</th>
+                                    <th>联系人</th>
+                                    <th>电话</th>
+                                    <th>出发地</th>
+                                    <th>车型</th>
+									<th>游玩路线</th>
+									<th>价格</th>
+									<th>人数</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 邮件发送模态框 -->
+    <div class="modal fade" id="emailModal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">发送邮件通知</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label>邮件内容（自动生成）</label>
+                        <textarea id="emailContent" class="form-control" rows="4" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.13.2/dist/av-min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // LeanCloud初始化
+        AV.init({
+            appId: "74Xir9Wxem42SP8G2lIJgWu4-gzGzoHsz",
+            appKey: "CtqUN4TzeIg5zze4oZFzNpt4",
+            serverURL: "https://74xir9wx.lc-cn-n1-shared.com"
+        });
+
+        // 初始化管理员账户（首次部署时执行一次）
+        async function initAdmin() {
+            const Admin = AV.Object.extend('Admin');
+            const query = new AV.Query('Admin');
+            const admins = await query.find();
+            
+            if(admins.length === 0) {
+                const admin = new Admin();
+                admin.set('username', 'admin');
+                admin.set('password', 'admin123');
+                await admin.save();
+                console.log('初始账户已创建');
+            }
+        }
+
+        // 登录验证
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const query = new AV.Query('Admin');
+            query.equalTo('username', username);
+            const admin = await query.first();
+
+            if(admin && admin.get('password') === password) {
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                initAdmin();
+                loadData();
+                listenNewOrders();
+            } else {
+                alert('账号或密码错误！');
+            }
+        }
+
+        // 实时监听新订单
+        function listenNewOrders() {
+            const query = new AV.Query('Booking');
+            query.subscribe().on('create', (newOrder) => {
+                sendEmail(newOrder);  // 触发邮件通知
+                loadData();        // 刷新列表
+            });
+        }
+
+        // 发送邮件通知
+        async function sendEmail(order) {
+            const content = `新预约通知：
+联系人：${order.get('contact')}
+电话：${order.get('phone')}
+出发地：${order.get('departure')}
+车型：${order.get('carType')}
+路线：${order.get('route')}
+价格：${order.get('price')}
+人数：${order.get('people')}
+时间：${new Date(order.get('date')).toLocaleDateString()}`;
+
+            try {
+                await AV.Cloud.run('sendEmail', {
+                    to: '759891165@qq.com', // 客服邮箱
+                    subject: '新预约通知',
+                    text: content
+                });
+                console.log('邮件通知已发送');
+            } catch (error) {
+                console.error('邮件发送失败:', error);
+            }
+        }
+
+        // 加载数据
+        async function loadData() {
+            const query = new AV.Query('Booking');
+            query.descending('createdAt');
+            const data = await query.find();
+
+            let html = '';
+            data.forEach(item => {
+                html += `
+                    <tr>
+                        <td>${new Date(item.get('createdAt')).toLocaleString()}</td>
+                        <td>${item.get('contact')}</td>
+                        <td><a href="tel:${item.get('phone')}">${item.get('phone')}</a></td>
+                        <td>${item.get('departure')}</td>
+                        <td>${item.get('carType')}</td>
+<td>${item.get('route')}</td>
+<td>${item.get('price')}</td>
+<td>${item.get('people')}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info" 
+                                    onclick="showDetails('${item.id}')">详情</button>
+                            <button class="btn btn-sm btn-danger" 
+                                    onclick="deleteItem('${item.id}')">处理完成</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            document.getElementById('dataTable').innerHTML = html;
+        }
+
+        // 显示详情
+        async function showDetails(id) {
+            const item = await new AV.Query('Booking').get(id);
+            document.getElementById('emailContent').value = `预约详情：
+联系人：${item.get('contact')}
+电话：${item.get('phone')}
+出发地：${item.get('departure')}
+人数：${item.get('people')}人
+车型：${item.get('carType')}
+路线：${item.get('route')}
+价格：${item.get('price')}
+预约时间：${new Date(item.get('date')).toLocaleDateString()}`;
+            
+            new bootstrap.Modal(document.getElementById('emailModal')).show();
+        }
+
+        // 删除记录
+        async function deleteItem(id) {
+            if(confirm('标记为已处理？')) {
+                const item = AV.Object.createWithoutData('Booking', id);
+                await item.destroy();
+                loadData();
+            }
+        }
+
+        function logout() {
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('loginBox').style.display = 'block';
+        }
+
+        // 初始化执行
+        (async () => {
+            await initAdmin();
+            if(location.hash === '#init') {
+                const admin = new AV.Object('Admin');
+                admin.set('username', 'admin');
+                admin.set('password', 'admin123');
+                await admin.save();
+                alert('初始账户已重置');
+            }
+        })();
+    </script>
+</body>
+</html>
