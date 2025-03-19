@@ -1,0 +1,647 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>预约管理系统</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .login-box { max-width: 400px; margin: 100px auto; }
+        .alert-bar { position: fixed; top: 0; width: 100%; z-index: 1000; }
+		/* 移动端优化 */
+        @media (max-width: 768px) {
+            .login-box { margin: 50px auto; max-width: 90%; }
+            .table-responsive { border: none; }
+            .btn-group { flex-direction: column; }
+        }
+		
+    </style>
+</head>
+<body>
+    <!-- 登录界面 -->
+    <div id="loginBox" class="card login-box">
+        <div class="card-body">
+            <h3 class="mb-4">管理员登录</h3>
+            <div class="mb-3">
+                <input type="text" id="username" class="form-control" placeholder="管理员账号">
+            </div>
+            <div class="mb-3">
+                <input type="password" id="password" class="form-control" placeholder="密码">
+            </div>
+            <button onclick="login()" class="btn btn-success w-100">登录</button>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainContent" style="display:none">
+        <div class="alert-bar bg-light p-2 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>客服邮箱：759891165@qq.com</span>
+                <button class="btn btn-danger btn-sm" onclick="logout()">退出登录</button>
+            </div>
+        </div>
+
+        <div class="container mt-5">
+            <div class="mb-3 d-flex gap-2">
+    <select id="filterStatus" class="form-select" onchange="loadData()">      
+      <option value="all">所有订单</option>      
+		<option value="待处理">待处理</option>
+  <option value="已处理">已处理</option>
+  <option value="已完成">已完成</option>
+  <option value="已取消">已取消</option>
+    </select>
+				<button class="btn btn-primary" onclick="loadData()">立即刷新</button>
+				<!-- 添加创建按钮 -->
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createModal">
+        <i class="bi bi-plus-lg"></i> 新建订单
+    </button>
+  </div>
+			<div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>预约时间</th>
+                                    <th>联系人</th>
+                                    <th>电话</th>
+                                    <th>出发地</th>
+                                    <th>车型</th>
+									<th>游玩路线</th>
+									<th>价格</th>
+									<th>人数</th>									
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改后的邮件发送模态框 -->
+<div class="modal fade" id="emailModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">发送邮件通知</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label>邮件内容（自动生成）</label>
+                    <textarea id="emailContent" class="form-control" rows="4" readonly></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" onclick="sendManualEmail()">发送邮件</button>
+				<button class="btn btn-outline-secondary" onclick="copyEmailContent()">复制内容</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+	<!-- 在邮件发送模态框之后添加编辑模态框 -->
+<div class="modal fade" id="editModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑订单信息</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm">
+                    <input type="hidden" id="editId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">联系人</label>
+                            <input type="text" id="editContact" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">联系电话</label>
+                            <input type="tel" id="editPhone" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">出发地</label>
+                            <input type="text" id="editDeparture" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">车型</label>
+                            <input type="text" id="editCarType" class="form-control" required>                         
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">游玩路线</label>
+                            <input type="text" id="editRoute" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">价格</label>
+                            <input type="number" id="editPrice" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">人数</label>
+                            <input type="number" id="editPeople" class="form-control" min="1" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">预约时间</label>
+                            <input type="datetime-local" id="editDate" class="form-control" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditedItem()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+	
+	<!-- 在编辑模态框后添加 -->
+<div class="modal fade" id="createModal">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">手动创建订单</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="createForm">
+                    <input type="hidden" id="createId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">联系人</label>
+                            <input type="text" id="createContact" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">联系电话</label>
+                            <input type="tel" id="createPhone" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">出发地</label>
+                            <input type="text" id="createDeparture" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">车型</label>
+                            <input type="text" id="createCarType" class="form-control" required>                         
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">游玩路线</label>
+                            <input type="text" id="createRoute" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">价格</label>
+                            <input type="number" id="createPrice" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">人数</label>
+                            <input type="number" id="createPeople" class="form-control" min="1" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">预约时间</label>
+                            <input type="datetime-local" id="createDate" class="form-control" required>
+                        </div>
+                    </div>
+                </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="createOrder()">创建</button>
+      </div>
+    </div>
+  </div>
+</div>
+    
+<!-- 调整后的脚本加载顺序 -->
+<script src="https://unpkg.com/leancloud-storage@4.13.2/dist/av-min.js"></script>
+	<script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+       // LeanCloud初始化
+AV.init({
+    appId: "74Xir9Wxem42SP8G2lIJgWu4-gzGzoHsz",
+    appKey: "CtqUN4TzeIg5zze4oZFzNpt4",
+    serverURL: "https://74xir9wx.lc-cn-n1-shared.com"
+});
+
+
+        // 初始化管理员账户（首次部署时执行一次）
+        async function initAdmin() {
+            const Admin = AV.Object.extend('Admin');
+            const query = new AV.Query('Admin');
+            const admins = await query.find();
+            
+            if(admins.length === 0) {
+                const admin = new Admin();
+                admin.set('username', 'admin');
+                admin.set('password', 'admin123');
+                await admin.save();
+                console.log('初始账户已创建');
+            }
+        }
+
+        // 登录验证
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const query = new AV.Query('Admin');
+            query.equalTo('username', username);
+            const admin = await query.first();
+
+            if(admin && admin.get('password') === password) {
+                localStorage.setItem('isLoggedIn', 'true');
+				document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                initAdmin();
+                loadData();
+                startPolling(); // 启动轮询
+            } else {
+                alert('账号或密码错误！');
+            }
+			localStorage.setItem('lastLoginTime', Date.now());
+        }
+
+		// 页面加载时检查登录状态
+document.addEventListener('DOMContentLoaded', () => {
+  if(localStorage.getItem('isLoggedIn') === 'true') {
+    document.getElementById('loginBox').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    loadData();    
+  }
+	if(localStorage.getItem('isLoggedIn') === 'true' && 
+     Date.now() - localStorage.getItem('lastLoginTime') < 3600000) { // 1小时有效期
+    // 保持登录状态逻辑
+  } else {
+    localStorage.removeItem('isLoggedIn');
+  }
+});
+        // 全局变量记录最新订单时间
+let lastCheckTime = null;
+
+		// 修改检查新订单逻辑
+async function checkNewOrders() {
+  const query = new AV.Query('Booking');
+  
+  // 使用安全的时间戳初始化
+  if (!lastCheckTime) {
+    // 获取最新订单时间作为基准
+    const lastOrder = await query.descending('createdAt').first();
+    lastCheckTime = lastOrder ? lastOrder.get('createdAt') : new Date(0);
+  }
+
+  query.greaterThan('createdAt', lastCheckTime);
+  query.equalTo('status', '待处理');
+  query.ascending('createdAt');
+
+  const orders = await query.find();
+  if (orders.length > 0) {
+    await Promise.all(orders.map(order => sendEmail(order)));
+    lastCheckTime = orders[orders.length-1].get('createdAt'); 
+    loadData();
+  }
+	// 在checkNewOrders中添加调试日志
+console.log('最新订单时间:', orders[orders.length-1]?.get('createdAt'));
+}
+function startPolling() {
+    setInterval(checkNewOrders, 10000);
+    checkNewOrders();
+}  // 添加缺失的闭合大括号
+
+// 标记订单已通知（防止重复发送）
+async function markAsNotified(order) {
+    order.set('status', '已处理');
+    await order.save();
+}
+
+        // 发送邮件通知
+        async function sendEmail(order) {
+  		
+  const content = `新预约通知：
+联系人：${order.get('contact')}
+电话：${order.get('phone')}
+出发地：${order.get('departure')}
+车型：${order.get('carType')}
+路线：${order.get('route')}
+价格：${order.get('price')}
+人数：${order.get('people')}
+时间：${new Date(order.get('date')).toLocaleDateString()}`;
+
+  try {
+    // 保留原始状态用于恢复
+    const originalStatus = order.get('status');
+    
+    // 临时修改状态防止重复查询
+    order.set('status', '处理中');
+    await order.save()
+	  
+	  await AV.Cloud.run('sendEmail', {
+      to: '759891165@qq.com',
+      subject: '新预约通知',
+      text: content
+    });
+    console.log('邮件通知已发送');
+	 // 先标记为已处理避免重复发送
+    order.set('status', '已处理');
+    await order.save(); 
+  } catch (error) {
+    // 失败时恢复原始状态
+    order.set('status', '待处理');
+    await order.save();
+    console.error('邮件发送失败:', error);
+  }
+}
+
+        // 加载数据
+        async function loadData() {
+            const query = new AV.Query('Booking');
+    const status = document.getElementById('filterStatus').value;
+
+			if (status !== 'all') {
+        query.equalTo('status', status); // 单一条件判断
+    }
+    
+
+    query.descending('createdAt'); // 修正引号
+    const data = await query.find();
+		
+			const statusColorMap = {
+        '待处理': 'btn-warning',
+        '已处理': 'btn-primary',
+        '已完成': 'btn-success',
+        '已取消': 'btn-danger'
+    };
+			
+			let html = '';
+            data.forEach(item => {
+                const currentStatus = item.get('status') || '待处理'; // 从数据获取状态
+        const statusColor = statusColorMap[currentStatus] || 'btn-secondary';
+				
+				html += `
+                    <tr>
+                        <td>${new Date(item.get('createdAt')).toLocaleString()}</td>
+                        <td>${item.get('contact')}</td>
+                        <td><a href="tel:${item.get('phone')}">${item.get('phone')}</a></td>
+                        <td>${item.get('departure')}</td>
+                        <td>${item.get('carType')}</td>
+<td>${item.get('route')}</td>
+<td>${item.get('price')}</td>
+<td>${item.get('people')}</td>
+                        <td>
+    <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-info" 
+                onclick="showDetails('${item.id}')">详情</button>
+        <button class="btn btn-warning" 
+                onclick="editItem('${item.id}')">编辑</button>
+<!-- 新增删除按钮 -->
+        <button class="btn btn-danger" 
+                onclick="deleteItem('${item.id}')">删除</button>
+        <div class="dropdown">
+            <button class="btn btn-danger dropdown-toggle" 
+                    data-bs-toggle="dropdown">${currentStatus} <!-- 显示当前状态 --></button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" 
+                     onclick="updateStatus('${item.id}','待处理')">标记为待处理</a></li>
+				<li><a class="dropdown-item" 
+                     onclick="updateStatus('${item.id}','已处理')">标记为已处理</a></li>
+                <li><a class="dropdown-item" 
+                     onclick="updateStatus('${item.id}','已完成')">标记为已完成</a></li>
+                <li><a class="dropdown-item" 
+                     onclick="updateStatus('${item.id}','已取消')">标记为已取消</a></li>
+            </ul>
+        </div>
+    </div>
+</td>
+
+                    </tr>
+                `;
+            });
+            document.getElementById('dataTable').innerHTML = html;
+        }
+
+   <!-- 添加状态更新函数 -->     
+async function updateStatus(id, status) {
+    const item = await new AV.Query('Booking').get(id);
+    item.set('status', status);
+    await item.save();
+    loadData();
+}
+
+		
+		// 显示详情
+        async function showDetails(id) {
+            const item = await new AV.Query('Booking').get(id);
+            document.getElementById('emailContent').value = `预约详情：
+联系人：${item.get('contact')}
+电话：${item.get('phone')}
+出发地：${item.get('departure')}
+人数：${item.get('people')}人
+车型：${item.get('carType')}
+路线：${item.get('route')}
+价格：${item.get('price')}
+预约时间：${new Date(item.get('date')).toLocaleDateString()}`;
+            
+            new bootstrap.Modal(document.getElementById('emailModal')).show();
+        }
+
+        // 删除记录
+        async function deleteItem(id) {
+    // 获取订单详情用于确认提示
+    const item = await new AV.Query('Booking').get(id);
+    const confirmMsg = `⚠️ 即将永久删除以下订单：\n\n
+        联系人：${item.get('contact') || '无'}\n
+        电话：${item.get('phone') || '无'}\n
+        预约时间：${new Date(item.get('date')).toLocaleString() || '无'}\n\n
+        此操作不可恢复，确认删除吗？`;
+
+    if(!confirm(confirmMsg)) return;
+
+    // 显示操作状态
+    const btn = event.target;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 删除中...';
+    btn.disabled = true;
+
+    try {
+        await item.destroy();
+        await loadData(); 
+        // 成功提示（使用Toast更优雅）
+        showToast('success', '订单已永久删除');
+    } catch (error) {
+        console.error('删除失败:', error);
+        showToast('danger', '删除失败：' + error.message);
+    } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    }
+}
+
+// 添加Toast提示功能
+function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-bg-${type} border-0`;
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>`;
+    
+    document.body.appendChild(toast);
+    new bootstrap.Toast(toast, {delay: 3000}).show();
+    setTimeout(() => toast.remove(), 3500);
+}
+
+		async function sendProcessEmail(order) {
+  const content = `订单已处理：
+联系人：${order.get('contact')}
+处理时间：${new Date().toLocaleString()}`;
+
+  await AV.Cloud.run('sendEmail', {
+    to: '759891165@qq.com',
+    subject: '订单处理确认',
+    text: content
+  });
+}
+	// 编辑订单函数
+async function editItem(id) {
+    const item = await new AV.Query('Booking').get(id);
+    // 将字符串日期转换为datetime-local支持的格式
+    const dateValue = new Date(item.get('date')).toISOString().slice(0, 16);
+    // 填充表单数据
+    document.getElementById('editId').value = id;
+    document.getElementById('editContact').value = item.get('contact') || '';
+    document.getElementById('editPhone').value = item.get('phone') || '';
+    document.getElementById('editDeparture').value = item.get('departure') || '';
+    document.getElementById('editCarType').value = item.get('carType') || '5座轿车';
+    document.getElementById('editRoute').value = item.get('route') || '';
+    document.getElementById('editPrice').value = item.get('price') || 0;
+    document.getElementById('editPeople').value = item.get('people') || 1;
+    document.getElementById('editDate').value = dateValue; // 填充日期
+    
+    // 显示模态框
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+// 保存修改函数
+async function saveEditedItem() {
+    const item = await new AV.Query('Booking').get(document.getElementById('editId').value);
+	// 获取日期输入值并转换为字符串
+    const dateInput = document.getElementById('editDate').value || new Date().toISOString(); // 格式为 "YYYY-MM-DDTHH:mm"
+    const dateString = new Date(dateInput).toISOString(); // 转换为ISO格式字符串
+    
+    item.set('contact', document.getElementById('editContact').value);
+    item.set('phone', document.getElementById('editPhone').value);
+    item.set('departure', document.getElementById('editDeparture').value);
+    item.set('carType', document.getElementById('editCarType').value);
+    item.set('route', document.getElementById('editRoute').value);
+    item.set('price', Number(document.getElementById('editPrice').value));
+    item.set('people', Number(document.getElementById('editPeople').value));
+    item.set('date', dateString); // 保存为字符串
+    
+    try {
+        await item.save();
+        
+        loadData();
+        bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+        alert('修改已保存');
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败，请检查控制台');
+    }
+}
+
+		async function createOrder() {
+  const Booking = AV.Object.extend('Booking');
+    const newOrder = new Booking();
+  // 获取日期输入值并转换为字符串
+    const dateInput = document.getElementById('createDate').value || new Date().toISOString(); // 格式为 "YYYY-MM-DDTHH:mm"
+    const dateString = new Date(dateInput).toISOString(); // 转换为ISO格式字符串
+  // 从表单获取值并保存
+  newOrder.set('contact', document.getElementById('createContact').value);
+  // ...其他字段类似...
+  newOrder.set('phone', document.getElementById('createPhone').value);
+    newOrder.set('departure', document.getElementById('createDeparture').value);
+    newOrder.set('carType', document.getElementById('createCarType').value);
+    newOrder.set('route', document.getElementById('createRoute').value);
+    newOrder.set('price', Number(document.getElementById('createPrice').value));
+    newOrder.set('people', Number(document.getElementById('createPeople').value));
+    newOrder.set('date', dateString); // 保存为字符串
+  newOrder.set('status', '待处理'); // 新增订单默认状态			
+			try {
+        await newOrder.save();
+        loadData();
+        bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
+        alert('订单创建成功');
+    } catch (error) {
+        console.error('创建失败:', error);
+        alert('创建失败，请检查控制台');
+    } 
+}
+
+		
+		
+// 发送编辑通知邮件
+async function sendEditNotification(order) {
+    const content = `订单信息修改通知：
+联系人：${order.get('contact')}
+电话：${order.get('phone')}
+修改时间：${new Date().toLocaleString()}`;
+
+    await AV.Cloud.run('sendEmail', {
+        to: '759891165@qq.com',
+        subject: '订单信息修改通知',
+        text: content
+    });
+}
+		
+        function logout() {
+            localStorage.removeItem('isLoggedIn');
+			document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('loginBox').style.display = 'block';
+        }
+		
+		// 手动发送邮件函数
+async function sendManualEmail() {
+    try {
+        const content = document.getElementById('emailContent').value;
+        await AV.Cloud.run('sendEmail', {
+            to: '759891165@qq.com',
+            subject: '预约详情通知',
+            text: content
+        });
+        alert('邮件已发送至客服邮箱');
+        bootstrap.Modal.getInstance(document.getElementById('emailModal')).hide();
+    } catch (error) {
+        console.error('邮件发送失败:', error);
+        alert('发送失败，请检查控制台');
+    }
+}
+	
+function copyEmailContent() {
+  navigator.clipboard.writeText(document.getElementById('emailContent').value);
+  alert('已复制到剪贴板');
+}
+
+	
+// 添加定时刷新（每30秒）
+document.addEventListener('DOMContentLoaded', () => {
+    setInterval(loadData, 30000); 
+});
+
+		
+        // 初始化执行
+        (async () => {
+            await initAdmin();
+            if(location.hash === '#init') {
+                const admin = new AV.Object('Admin');
+                admin.set('username', 'admin');
+                admin.set('password', 'admin123');
+                await admin.save();
+                alert('初始账户已重置');
+            }
+        })();
+    </script>
+</body>
+</html>
